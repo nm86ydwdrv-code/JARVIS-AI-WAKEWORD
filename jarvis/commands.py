@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import webbrowser
+import winreg
 
 import psutil
 
@@ -36,6 +37,38 @@ WEBSITE_ALIASES = {
     "reddit": "https://reddit.com",
     "netflix": "https://netflix.com",
 }
+
+
+def _resolve_app_path(exe: str) -> str:
+    """Resolve an executable name to a full path using the Windows
+    'App Paths' registry, falling back to the bare name."""
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        try:
+            key = winreg.OpenKey(
+                hive, rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{exe}"
+            )
+            path = winreg.QueryValue(key, None)
+            if path:
+                return path
+        except OSError:
+            continue
+    return exe
+
+
+def _launch_app(exe: str) -> bool:
+    """Launch an application by name or full path. Returns True on success."""
+    path = _resolve_app_path(exe)
+    try:
+        subprocess.Popen(path)
+        return True
+    except OSError:
+        pass
+
+    try:
+        os.startfile(path)
+        return True
+    except OSError:
+        return False
 
 
 def _set_volume(level: float):
@@ -115,11 +148,9 @@ def handle(text: str, user_name: str):
             return True, f"Opening {name}.", False
         exe = APP_ALIASES.get(name)
         if exe:
-            try:
-                subprocess.Popen(exe)
+            if _launch_app(exe):
                 return True, f"Opening {name}.", False
-            except OSError:
-                return True, f"I couldn't find {name} on this system.", False
+            return True, f"I couldn't find {name} on this system.", False
         return True, f"I don't know how to open {name} yet.", False
 
     # Volume control

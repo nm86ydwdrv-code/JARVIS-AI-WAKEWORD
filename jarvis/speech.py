@@ -9,14 +9,17 @@ SAMPLE_RATE = 16000
 
 _recognizer = sr.Recognizer()
 
-_engine = pyttsx3.init()
-_engine.setProperty("rate", VOICE_RATE)
-
 
 def speak(text: str) -> None:
     print(f"JARVIS: {text}")
-    _engine.say(text)
-    _engine.runAndWait()
+    # Re-create the engine each call: on Windows (SAPI5), reusing a single
+    # pyttsx3 engine across multiple runAndWait() calls causes it to stop
+    # producing audio after the first utterance.
+    engine = pyttsx3.init()
+    engine.setProperty("rate", VOICE_RATE)
+    engine.say(text)
+    engine.runAndWait()
+    engine.stop()
 
 
 def _record(duration: float) -> sr.AudioData:
@@ -24,6 +27,13 @@ def _record(duration: float) -> sr.AudioData:
         int(duration * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=1, dtype="int16"
     )
     sd.wait()
+    audio = audio.flatten()
+
+    # Boost quiet microphone input so recognition has a better chance.
+    peak = int(np.abs(audio).max())
+    if 0 < peak < 32767:
+        audio = (audio.astype(np.float32) * (32767.0 / peak * 0.9)).astype(np.int16)
+
     return sr.AudioData(audio.tobytes(), SAMPLE_RATE, 2)
 
 
