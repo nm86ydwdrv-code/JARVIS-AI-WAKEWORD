@@ -1,11 +1,13 @@
+import numpy as np
+import sounddevice as sd
 import speech_recognition as sr
 import pyttsx3
 
 from jarvis.config import VOICE_RATE
 
+SAMPLE_RATE = 16000
+
 _recognizer = sr.Recognizer()
-_recognizer.energy_threshold = 300
-_recognizer.dynamic_energy_threshold = True
 
 _engine = pyttsx3.init()
 _engine.setProperty("rate", VOICE_RATE)
@@ -17,17 +19,19 @@ def speak(text: str) -> None:
     _engine.runAndWait()
 
 
+def _record(duration: float) -> sr.AudioData:
+    audio = sd.rec(
+        int(duration * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=1, dtype="int16"
+    )
+    sd.wait()
+    return sr.AudioData(audio.tobytes(), SAMPLE_RATE, 2)
+
+
 def listen(timeout=None, phrase_time_limit=None):
-    """Listen on the default microphone and return recognized text (lowercase),
+    """Record from the default microphone and return recognized text (lowercase),
     or None if nothing could be understood."""
-    with sr.Microphone() as source:
-        _recognizer.adjust_for_ambient_noise(source, duration=0.3)
-        try:
-            audio = _recognizer.listen(
-                source, timeout=timeout, phrase_time_limit=phrase_time_limit
-            )
-        except sr.WaitTimeoutError:
-            return None
+    duration = phrase_time_limit or timeout or 4
+    audio = _record(duration)
 
     try:
         text = _recognizer.recognize_google(audio)
